@@ -27,7 +27,7 @@ if __name__ == "__main__":
     # IMPORTANT: Create a 'dataset.csv' file in 'data/raw/'
     # It must have two columns: 'text' and 'label' (0 for Fakta, 1 for Hoax)
     try:
-        df = pd.read_csv("data/raw/dataset.csv")
+        df = pd.read_csv("../data/dataset.csv")
     except FileNotFoundError:
         print("Error: 'data/raw/dataset.csv' not found.")
         print("Please create the dataset file and run again.")
@@ -91,7 +91,7 @@ if __name__ == "__main__":
 
     # --- 7. Save the Best Model ---
     # The saved model is the entire pipeline (vectorizer + classifier)
-    with open("models/mnb_model.pkl", "wb") as f:
+    with open("../models/classic_full/mnb_model.pkl", "wb") as f:
         pickle.dump(best_model, f)
 
-    print("\nBest Multinomial Naive Bayes model saved to 'models/mnb_model.pkl'")
+    print("\nBest Multinomial Naive Bayes model saved to 'classic_full/mnb_model.pkl'")

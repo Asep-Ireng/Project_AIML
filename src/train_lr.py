@@ -4,11 +4,11 @@ import pandas as pd
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.svm import LinearSVC
+from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import classification_report
 
-# --- 1. Preprocessing Function (Identical) ---
+# --- 1. Preprocessing Function (Identical to the previous script) ---
 factory = StemmerFactory()
 stemmer = factory.create_stemmer()
 
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     # --- 2. Load and Prepare Data ---
     print("Loading and preparing data...")
     try:
-        df = pd.read_csv("data/raw/dataset.csv")
+        df = pd.read_csv("../data/dataset.csv")
     except FileNotFoundError:
         print("Error: 'data/raw/dataset.csv' not found.")
         print("Please create the dataset file and run again.")
@@ -40,24 +40,25 @@ if __name__ == "__main__":
     print(f"Data split: {len(X_train)} training, {len(X_test)} testing.")
 
     # --- 3. Create a Training Pipeline ---
-    # We are now using LinearSVC (Support Vector Classifier)
+    # We are now using LogisticRegression as the classifier
     pipeline = Pipeline(
         [
             ("tfidf", TfidfVectorizer()),
-            ("clf", LinearSVC(max_iter=2000, random_state=42)),
+            ("clf", LogisticRegression(max_iter=1000, random_state=42)),
         ]
     )
 
     # --- 4. Define Hyperparameter Grid for Tuning ---
-    # The main parameter for LinearSVC is 'C'
+    # The parameters are now specific to Logistic Regression
     parameters = {
         "tfidf__ngram_range": [(1, 1), (1, 2)],
         "tfidf__max_features": [3000, 5000],
-        "clf__C": [0.1, 1, 10],  # Regularization parameter
+        "clf__C": [0.1, 1, 10],  # Regularization strength
+        "clf__penalty": ["l2"],  # Regularization type
     }
 
-    # --- 5. Perform Grid Search ---
-    print("\nStarting Grid Search for Support Vector Machine (LinearSVC)...")
+    # --- 5. Perform Grid Search with Cross-Validation ---
+    print("\nStarting Grid Search for Logistic Regression...")
     grid_search = GridSearchCV(
         pipeline,
         parameters,
@@ -79,7 +80,8 @@ if __name__ == "__main__":
     print(classification_report(y_test, y_pred, target_names=["Fakta", "Hoax"]))
 
     # --- 7. Save the Best Model ---
-    with open("models/svm_model.pkl", "wb") as f:
+    # Save it with a different name to avoid overwriting the MNB model
+    with open("../models/classic_full/lr_model.pkl", "wb") as f:
         pickle.dump(best_model, f)
 
-    print("\nBest SVM model saved to 'models/svm_model.pkl'")
+    print("\nBest Logistic Regression model saved to 'classic_full/lr_model.pkl'")
