@@ -1,5 +1,6 @@
 import pandas as pd
 import torch
+import numpy as np
 from torch.utils.data import Dataset
 from transformers import (
     AutoTokenizer,
@@ -8,18 +9,17 @@ from transformers import (
     Trainer,
 )
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, f1_score
-import os
+from sklearn.metrics import accuracy_score, f1_score, classification_report
 
-# --- 1. Konfigurasi dan Pengecekan GPU ---
+# --- Setup ---
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
 if device == "cpu":
     print("WARNING: Running on CPU. This will be extremely slow.")
-
 MODEL_NAME = "indobenchmark/indobert-base-p1"
 
-# --- 2. Custom Dataset Class (Identical) ---
+
+# --- Dataset Class ---
 class HoaxDataset(Dataset):
     def __init__(self, texts, labels, tokenizer, max_len=128):
         self.texts = texts
@@ -34,14 +34,9 @@ class HoaxDataset(Dataset):
         text = str(self.texts[idx])
         label = self.labels[idx]
         encoding = self.tokenizer.encode_plus(
-            text,
-            add_special_tokens=True,
-            max_length=self.max_len,
-            return_token_type_ids=False,
-            padding="max_length",
-            truncation=True,
-            return_attention_mask=True,
-            return_tensors="pt",
+            text, add_special_tokens=True, max_length=self.max_len,
+            return_token_type_ids=False, padding="max_length",
+            truncation=True, return_attention_mask=True, return_tensors="pt",
         )
         return {
             "input_ids": encoding["input_ids"].flatten(),
@@ -49,47 +44,39 @@ class HoaxDataset(Dataset):
             "labels": torch.tensor(label, dtype=torch.long),
         }
 
-# --- 3. Fungsi untuk Menghitung Metrik (Identical) ---
+
+# --- Metrics Function ---
 def compute_metrics(p):
     preds = p.predictions.argmax(-1)
     f1 = f1_score(p.label_ids, preds, average="macro")
     acc = accuracy_score(p.label_ids, preds)
     return {"accuracy": acc, "f1": f1}
 
-# --- Main Execution Block ---
-if __name__ == "__main__":
-    # --- 4. Load Data ---
-    print("Loading and preparing data...")
-    try:
-        df = pd.read_csv("../data/dataset.csv")
-    except FileNotFoundError:
-        print("Error: 'data/raw/dataset.csv' not found.")
-        exit()
 
+# --- Main Execution ---
+if __name__ == "__main__":
+    # --- Load Data ---
+    print("Loading and preparing data...")
+    df = pd.read_csv("../data/dataset.csv")
     train_df, test_df = train_test_split(
         df, test_size=0.2, random_state=42, stratify=df["label"]
     )
     train_df, val_df = train_test_split(
         train_df, test_size=0.1, random_state=42, stratify=train_df["label"]
     )
-    print(
-        f"Data split: {len(train_df)} training, {len(val_df)} validation, {len(test_df)} testing."
-    )
+    print(f"Data split: {len(train_df)} training, {len(val_df)} validation, {len(test_df)} testing.")
 
-    # --- 5. Inisialisasi Tokenizer dan Semua Dataset ---
+    # --- Initialize ---
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    test_dataset = HoaxDataset(test_df.text.to_list(), test_df.label.to_list(), tokenizer)
     train_dataset = HoaxDataset(train_df.text.to_list(), train_df.label.to_list(), tokenizer)
     val_dataset = HoaxDataset(val_df.text.to_list(), val_df.label.to_list(), tokenizer)
-    # **NEW**: Create the test dataset object for evaluation
-    test_dataset = HoaxDataset(test_df.text.to_list(), test_df.label.to_list(), tokenizer)
-
-    # --- 6. Load Pre-trained Model ---
     model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=2)
     model.to(device)
 
-    # --- 7. Tentukan Argumen Training ---
+    # --- Training Arguments ---
     training_args = TrainingArguments(
-        output_dir="../models/indobert_results",
+        output_dir="models/indobert_results",
         num_train_epochs=3,
         per_device_train_batch_size=8,
         per_device_eval_batch_size=8,
@@ -97,45 +84,48 @@ if __name__ == "__main__":
         eval_strategy="epoch",
         save_strategy="epoch",
         load_best_model_at_end=True,
-        metric_for_best_model="f1", # Use F1 score to find the best model
+        metric_for_best_model="f1",
     )
 
-    # --- 8. Inisialisasi Trainer ---
     trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
-        compute_metrics=compute_metrics,
+        model=model, args=training_args, train_dataset=train_dataset,
+        eval_dataset=val_dataset, compute_metrics=compute_metrics,
     )
 
-    # --- 9. **NEW**: Evaluate BEFORE Fine-Tuning ---
+    # --- Evaluate BEFORE Fine-Tuning ---
     print("\n--- Evaluating Model BEFORE Fine-Tuning (Zero-Shot Performance) ---")
     initial_results = trainer.evaluate(eval_dataset=test_dataset)
-    print(initial_results)
 
-    # --- 10. Mulai Training ---
+    # --- Train ---
     print("\n--- Starting Fine-Tuning of IndoBERT ---")
     trainer.train()
 
-    # --- 11. **NEW**: Evaluate AFTER Fine-Tuning ---
-    print("\n--- Evaluating Model AFTER Fine-Tuning ---")
-    finetuned_results = trainer.evaluate(eval_dataset=test_dataset)
-    print(finetuned_results)
+    # --- Generate Detailed Report for the FINAL model ---
+    print("\n--- Generating Final Detailed Report on Test Set ---")
+    predictions_output = trainer.predict(test_dataset)
+    y_pred = np.argmax(predictions_output.predictions, axis=1)
+    y_true = predictions_output.label_ids
+    print("\nClassification Report on Test Set (Fine-Tuned IndoBERT):")
+    print(classification_report(y_true, y_pred, target_names=["Fakta", "Hoax"]))
 
-    # --- 12. Simpan Model Terbaik ---
-    best_model_path = "../models/indobert_full/indobert_final"
-    trainer.save_model(best_model_path)
-    tokenizer.save_pretrained(best_model_path)
-    print(f"\nBest IndoBERT model saved to '{best_model_path}'")
+    # # --- Save Model ---
+    # best_model_path = "models/indobert_final"
+    # trainer.save_model(best_model_path)
+    # tokenizer.save_pretrained(best_model_path)
+    # print(f"\nBest IndoBERT model saved to '{best_model_path}'")
 
-    # --- 13. **NEW**: Final Comparison Summary ---
-    print("\n\n--- EXPERIMENT SUMMARY ---")
+    # --- Final Comparison Summary ---
+    print("\n\n--- EXPERIMENT SUMMARY: BEFORE vs. AFTER ---")
     print(f"Model: {MODEL_NAME}")
     print("\nPerformance BEFORE Fine-Tuning:")
     print(f"  Accuracy: {initial_results.get('eval_accuracy', 'N/A'):.4f}")
     print(f"  F1 Score: {initial_results.get('eval_f1', 'N/A'):.4f}")
+
+    # Get the final metrics from the detailed report for an accurate comparison
+    final_f1_macro = f1_score(y_true, y_pred, average='macro')
+    final_accuracy = accuracy_score(y_true, y_pred)
+
     print("\nPerformance AFTER Fine-Tuning:")
-    print(f"  Accuracy: {finetuned_results.get('eval_accuracy', 'N/A'):.4f}")
-    print(f"  F1 Score: {finetuned_results.get('eval_f1', 'N/A'):.4f}")
-    print("--------------------------")
+    print(f"  Accuracy: {final_accuracy:.4f}")
+    print(f"  F1 Score: {final_f1_macro:.4f}")
+    print("--------------------------------------------")

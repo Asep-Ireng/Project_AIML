@@ -56,7 +56,7 @@ try:
     indobert_model.eval()
     models["IndoBERT"] = (indobert_model, indobert_tokenizer)
 except OSError:
-    print("Peringatan: Model IndoBERT tidak ditemukan di 'models/indobert_full/'. Opsi IndoBERT tidak akan tersedia.")
+    print("Warning: Model IndoBERT tidak ditemukan di 'models/indobert_full/'. Opsi IndoBERT tidak akan tersedia.")
 
 print("Semua model berhasil dimuat. Aplikasi siap.")
 
@@ -91,7 +91,7 @@ def analyze_text(model_choice, article_text):
 
             clean_sentence = preprocess_classic(sentence)
 
-            # --- NEW: Check if the model can predict probabilities ---
+            # Check if the model can predict probabilities ---
             if hasattr(model, "predict_proba"):
                 # For Naive Bayes and Logistic Regression
                 prob_hoax = model.predict_proba([clean_sentence])[0][1]
@@ -139,7 +139,7 @@ def analyze_text(model_choice, article_text):
     return summary_text, highlight_data
 
 
-# --- 3. DEFINISI UI GRADIO ---
+# --- 3. UI GRADIO ---
 with gr.Blocks(theme=gr.themes.Soft(), title="AI Fact Checker") as demo:
     gr.Markdown("# AI Fact Checker - Analisis Teks Politik")
     gr.Markdown(
