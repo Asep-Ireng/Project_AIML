@@ -88,3 +88,17 @@ python app.py
 - Aplikasi akan membutuhkan waktu beberapa saat untuk memuat semua model saat pertama kali dijalankan.
 
 ## Struktur Proyek
+.
+├── app.py                  # Skrip utama aplikasi Gradio
+├── data/
+│   └── raw/
+│       └── dataset.csv     # Dataset final yang sudah bersih
+├── models/
+│   ├── classic_full/       # Model klasik hasil training data lengkap
+│   └── indobert_full/      # Model IndoBERT hasil fine-tuning
+├── src/
+│   ├── train_mb.py         # Skrip training untuk setiap model
+│   ├── train_lr.py
+│   ├── train_svm.py
+│   └── train_indobert_comparison.py
+└── requirements.txt        # Daftar dependensi Python
